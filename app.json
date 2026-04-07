@@ -37,6 +37,19 @@
             "BROWSABLE",
             "DEFAULT"
           ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "spendbook"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -57,6 +70,12 @@
       "eas": {
         "projectId": "6028d76f-1252-4106-a664-2b7f7869b4e2"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6028d76f-1252-4106-a664-2b7f7869b4e2"
     }
   }
 }

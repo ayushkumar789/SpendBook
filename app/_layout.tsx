@@ -22,11 +22,15 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loading) return;
-    const inAuthGroup = segments[0] === '(tabs)';
-    const inShared = segments[0] === 'shared';
-    if (session && !inAuthGroup && !inShared) {
+    const onLoginPage = segments.length === 0 || segments[0] === 'index';
+    const onSharedPage = segments[0] === 'shared';
+    const onCallbackPage = segments[0] === 'auth';
+
+    if (session && onLoginPage) {
+      // Authenticated user landed on login — send them home.
       router.replace('/(tabs)');
-    } else if (!session && !inShared && segments[0] !== 'shared') {
+    } else if (!session && !onLoginPage && !onSharedPage && !onCallbackPage) {
+      // Unauthenticated user tried to access a protected screen — send to login.
       router.replace('/');
     }
   }, [session, loading, segments]);
@@ -77,6 +81,7 @@ export default function RootLayout() {
         <Stack.Screen name="transaction/add" options={{ title: 'Add Transaction', presentation: 'modal' }} />
         <Stack.Screen name="transaction/edit/[id]" options={{ title: 'Edit Transaction', presentation: 'modal' }} />
         <Stack.Screen name="payment-method/add" options={{ title: 'Add Payment Method', presentation: 'modal' }} />
+        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
         <Stack.Screen name="shared/enter-code" options={{ title: 'Enter Share Code', headerStyle: { backgroundColor: Colors.primary }, headerTintColor: Colors.white }} />
         <Stack.Screen name="shared/[shareId]" options={{ title: 'Shared Book' }} />
       </Stack>

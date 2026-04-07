@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Book } from '../constants/types';
-import { getBooks, subscribeToBooks } from '../lib/supabase';
+import { supabase, getBooks, subscribeToBooks } from '../lib/supabase';
 
 export function useBooks(ownerId: string | null) {
   const [books, setBooks] = useState<Book[]>([]);
@@ -30,7 +30,7 @@ export function useBooks(ownerId: string | null) {
     });
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [ownerId]);
 

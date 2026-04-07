@@ -1,5 +1,5 @@
 export type PaymentType = 'UPI' | 'Debit' | 'Credit' | 'Net Banking';
-export type TransactionType = 'in' | 'out';
+export type TransactionType = 'in' | 'out' | 'transfer';
 
 export interface AppUser {
   id: string;
@@ -43,6 +43,8 @@ export interface Transaction {
   amount: number;
   category: string;
   payment_method_id: string | null;
+  to_payment_method_id: string | null; // transfer: destination account
+  person: string;                       // who you sent to / received from
   note: string;
   date: string;
   created_at: string;

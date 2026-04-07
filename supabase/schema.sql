@@ -45,17 +45,27 @@ CREATE TABLE IF NOT EXISTS public.books (
 
 -- ── TRANSACTIONS ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.transactions (
-  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  book_id           UUID NOT NULL REFERENCES public.books(id) ON DELETE CASCADE,
-  owner_id          UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  type              TEXT NOT NULL CHECK (type IN ('in','out')),
-  amount            NUMERIC(14,2) NOT NULL CHECK (amount > 0),
-  category          TEXT NOT NULL,
-  payment_method_id UUID REFERENCES public.payment_methods(id) ON DELETE SET NULL,
-  note              TEXT NOT NULL DEFAULT '',
-  date              DATE NOT NULL,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  book_id               UUID NOT NULL REFERENCES public.books(id) ON DELETE CASCADE,
+  owner_id              UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  type                  TEXT NOT NULL CHECK (type IN ('in','out','transfer')),
+  amount                NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+  category              TEXT NOT NULL,
+  payment_method_id     UUID REFERENCES public.payment_methods(id) ON DELETE SET NULL,
+  to_payment_method_id  UUID REFERENCES public.payment_methods(id) ON DELETE SET NULL,
+  person                TEXT NOT NULL DEFAULT '',
+  note                  TEXT NOT NULL DEFAULT '',
+  date                  DATE NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ── IF UPGRADING AN EXISTING DATABASE ────────────────────────
+-- Run these ALTER statements if the table already exists:
+-- ALTER TABLE public.transactions
+--   ADD COLUMN IF NOT EXISTS to_payment_method_id UUID REFERENCES public.payment_methods(id) ON DELETE SET NULL,
+--   ADD COLUMN IF NOT EXISTS person TEXT NOT NULL DEFAULT '';
+-- ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
+-- ALTER TABLE public.transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('in','out','transfer'));
 
 -- ── INDEXES ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_payment_methods_owner ON public.payment_methods(owner_id);

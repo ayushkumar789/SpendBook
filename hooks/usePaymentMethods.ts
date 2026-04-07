@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PaymentMethod } from '../constants/types';
-import { getPaymentMethods, subscribeToPaymentMethods } from '../lib/supabase';
+import { supabase, getPaymentMethods, subscribeToPaymentMethods } from '../lib/supabase';
 
 export function usePaymentMethods(ownerId: string | null) {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -30,7 +30,7 @@ export function usePaymentMethods(ownerId: string | null) {
     });
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [ownerId]);
 

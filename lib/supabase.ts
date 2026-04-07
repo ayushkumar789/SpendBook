@@ -127,7 +127,7 @@ export function subscribeToPaymentMethods(
   callback: (methods: PaymentMethod[]) => void
 ): RealtimeChannel {
   const channel = supabase
-    .channel(`payment_methods:${ownerId}`)
+    .channel(`payment_methods:${ownerId}:${Date.now()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'payment_methods', filter: `owner_id=eq.${ownerId}` },
@@ -216,7 +216,7 @@ export function subscribeToBooks(
   callback: (books: Book[]) => void
 ): RealtimeChannel {
   const channel = supabase
-    .channel(`books:${ownerId}`)
+    .channel(`books:${ownerId}:${Date.now()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'books', filter: `owner_id=eq.${ownerId}` },
@@ -234,7 +234,7 @@ export function subscribeToSharedBook(
   callback: (book: Book | null) => void
 ): RealtimeChannel {
   const channel = supabase
-    .channel(`shared_book:${shareId}`)
+    .channel(`shared_book:${shareId}:${Date.now()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'books' },
@@ -289,7 +289,7 @@ export function subscribeToTransactions(
   callback: (transactions: Transaction[]) => void
 ): RealtimeChannel {
   const channel = supabase
-    .channel(`transactions:${bookId}`)
+    .channel(`transactions:${bookId}:${Date.now()}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'transactions', filter: `book_id=eq.${bookId}` },
