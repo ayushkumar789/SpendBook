@@ -7,16 +7,19 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
+import { AppColors } from '../../constants/colors';
 import { signOut } from '../../lib/supabase';
-import { Colors } from '../../constants/colors';
 
 export default function SettingsScreen() {
   const { appUser, user } = useAuth();
   const router = useRouter();
+  const { isDark, toggleTheme, colors } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
 
   function confirmSignOut() {
@@ -43,8 +46,10 @@ export default function SettingsScreen() {
   const email = appUser?.email ?? user?.email ?? '';
   const photoUrl = appUser?.photo_url ?? user?.user_metadata?.avatar_url ?? '';
 
+  const styles = makeStyles(colors);
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: Colors.pageBg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.pageBg }}>
       {/* Profile Card */}
       <View style={styles.profileCard}>
         {photoUrl ? (
@@ -58,7 +63,7 @@ export default function SettingsScreen() {
         <Text style={styles.email}>{email}</Text>
       </View>
 
-      {/* Menu */}
+      {/* Quick Actions */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <TouchableOpacity
@@ -67,13 +72,14 @@ export default function SettingsScreen() {
           activeOpacity={0.7}
         >
           <View style={[styles.menuIcon, { backgroundColor: '#ede9fe' }]}>
-            <Ionicons name="qr-code-outline" size={20} color={Colors.primary} />
+            <Ionicons name="qr-code-outline" size={20} color={colors.primary} />
           </View>
           <Text style={styles.menuLabel}>Enter a Share Code</Text>
-          <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </TouchableOpacity>
       </View>
 
+      {/* App Info */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>App Info</Text>
         <View style={styles.infoRow}>
@@ -90,6 +96,23 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Appearance */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Appearance</Text>
+        <View style={styles.toggleRow}>
+          <View style={[styles.menuIcon, { backgroundColor: isDark ? '#2d2d2d' : '#f1f5f9' }]}>
+            <Ionicons name={isDark ? 'moon' : 'sunny-outline'} size={20} color={isDark ? '#a78bfa' : '#f59e0b'} />
+          </View>
+          <Text style={styles.menuLabel}>Dark Mode</Text>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor={colors.white}
+          />
+        </View>
+      </View>
+
       <View style={{ padding: 20 }}>
         <TouchableOpacity
           style={[styles.signOutBtn, signingOut && { opacity: 0.6 }]}
@@ -97,7 +120,7 @@ export default function SettingsScreen() {
           disabled={signingOut}
           activeOpacity={0.85}
         >
-          <Ionicons name="log-out-outline" size={20} color={Colors.cashOut} />
+          <Ionicons name="log-out-outline" size={20} color={colors.cashOut} />
           <Text style={styles.signOutText}>{signingOut ? 'Signing out…' : 'Sign Out'}</Text>
         </TouchableOpacity>
       </View>
@@ -105,105 +128,93 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  profileCard: {
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    paddingVertical: 36,
-    paddingHorizontal: 24,
-  },
-  avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    marginBottom: 14,
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  avatarFallback: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.white,
-    marginBottom: 4,
-  },
-  email: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  section: {
-    marginTop: 20,
-    marginHorizontal: 16,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  menuIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.body,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 0.5,
-    borderTopColor: Colors.border,
-  },
-  infoLabel: { fontSize: 14, color: Colors.muted },
-  infoValue: { fontSize: 14, color: Colors.body, fontWeight: '500' },
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.cashOutBg,
-    borderRadius: 14,
-    paddingVertical: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  signOutText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.cashOut,
-  },
-});
+const makeStyles = (C: AppColors) => StyleSheet.create({
+    profileCard: {
+      backgroundColor: C.primary,
+      alignItems: 'center',
+      paddingVertical: 36,
+      paddingHorizontal: 24,
+    },
+    avatar: {
+      width: 84,
+      height: 84,
+      borderRadius: 42,
+      marginBottom: 14,
+      borderWidth: 3,
+      borderColor: 'rgba(255,255,255,0.3)',
+    },
+    avatarFallback: {
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarInitial: { fontSize: 34, fontWeight: '700', color: C.white },
+    name: { fontSize: 20, fontWeight: '700', color: C.white, marginBottom: 4 },
+    email: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+    section: {
+      marginTop: 20,
+      marginHorizontal: 16,
+      backgroundColor: C.card,
+      borderRadius: 16,
+      borderWidth: 0.5,
+      borderColor: C.border,
+      overflow: 'hidden',
+    },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: C.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 6,
+    },
+    menuRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 12,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      gap: 12,
+      borderTopWidth: 0.5,
+      borderTopColor: C.border,
+    },
+    menuIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    menuLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: C.body },
+    infoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderTopWidth: 0.5,
+      borderTopColor: C.border,
+    },
+    infoLabel: { fontSize: 14, color: C.muted },
+    infoValue: { fontSize: 14, color: C.body, fontWeight: '500' },
+    signOutBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: C.cashOutBg,
+      borderRadius: 14,
+      paddingVertical: 16,
+      gap: 10,
+      borderWidth: 1,
+      borderColor: '#fecaca',
+    },
+    signOutText: { fontSize: 16, fontWeight: '700', color: C.cashOut },
+  });

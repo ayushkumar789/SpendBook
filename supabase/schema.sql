@@ -32,15 +32,16 @@ CREATE TABLE IF NOT EXISTS public.payment_methods (
 
 -- ── BOOKS ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.books (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id    UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  color_tag   TEXT NOT NULL DEFAULT '#5c2d91',
-  icon_emoji  TEXT NOT NULL DEFAULT '📒',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  is_shared   BOOLEAN NOT NULL DEFAULT FALSE,
-  share_id    UUID UNIQUE
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_id       UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  description    TEXT NOT NULL DEFAULT '',
+  color_tag      TEXT NOT NULL DEFAULT '#5c2d91',
+  icon_emoji     TEXT NOT NULL DEFAULT '📒',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_shared      BOOLEAN NOT NULL DEFAULT FALSE,
+  share_id       UUID UNIQUE,
+  share_id_full  UUID UNIQUE   -- full-access share code (allows detail view)
 );
 
 -- ── TRANSACTIONS ─────────────────────────────────────────────
@@ -59,18 +60,33 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── IF UPGRADING AN EXISTING DATABASE ────────────────────────
--- Run these ALTER statements if the table already exists:
--- ALTER TABLE public.transactions
---   ADD COLUMN IF NOT EXISTS to_payment_method_id UUID REFERENCES public.payment_methods(id) ON DELETE SET NULL,
---   ADD COLUMN IF NOT EXISTS person TEXT NOT NULL DEFAULT '';
--- ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
--- ALTER TABLE public.transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('in','out','transfer'));
+-- ══════════════════════════════════════════════════════════════
+-- MIGRATION — run this in Supabase SQL Editor if the transactions
+-- table was created before the Self-Transfer feature was added.
+-- Safe to run multiple times (ADD COLUMN IF NOT EXISTS).
+-- ══════════════════════════════════════════════════════════════
+
+-- 1. Add the two new columns (no-op if they already exist)
+ALTER TABLE public.transactions
+  ADD COLUMN IF NOT EXISTS to_payment_method_id UUID
+    REFERENCES public.payment_methods(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS person TEXT NOT NULL DEFAULT '';
+
+-- 2. Widen the type CHECK to allow 'transfer'
+--    (DROP + re-ADD is the only way to change a CHECK in Postgres)
+ALTER TABLE public.transactions
+  DROP CONSTRAINT IF EXISTS transactions_type_check;
+
+ALTER TABLE public.transactions
+  ADD CONSTRAINT transactions_type_check
+  CHECK (type IN ('in', 'out', 'transfer'));
+-- ══════════════════════════════════════════════════════════════
 
 -- ── INDEXES ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_payment_methods_owner ON public.payment_methods(owner_id);
 CREATE INDEX IF NOT EXISTS idx_books_owner ON public.books(owner_id);
 CREATE INDEX IF NOT EXISTS idx_books_share_id ON public.books(share_id) WHERE share_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_books_share_id_full ON public.books(share_id_full) WHERE share_id_full IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_transactions_book ON public.transactions(book_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_owner ON public.transactions(owner_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON public.transactions(date DESC);
@@ -106,9 +122,13 @@ CREATE POLICY "books: insert own" ON public.books FOR INSERT WITH CHECK (auth.ui
 CREATE POLICY "books: update own" ON public.books FOR UPDATE USING (auth.uid() = owner_id);
 CREATE POLICY "books: delete own" ON public.books FOR DELETE USING (auth.uid() = owner_id);
 
--- Books: anyone can read shared books (no auth needed for shared view)
+-- Books: anyone can read a book via its view-only share code
 CREATE POLICY "books: select shared" ON public.books FOR SELECT
   USING (is_shared = TRUE AND share_id IS NOT NULL);
+
+-- Books: anyone can read a book via its full-access share code
+CREATE POLICY "books: select shared full" ON public.books FOR SELECT
+  USING (is_shared = TRUE AND share_id_full IS NOT NULL);
 
 -- Transactions: owner full access
 CREATE POLICY "txn: select own" ON public.transactions FOR SELECT USING (auth.uid() = owner_id);
@@ -124,6 +144,35 @@ CREATE POLICY "txn: select shared" ON public.transactions FOR SELECT
       WHERE is_shared = TRUE AND share_id IS NOT NULL
     )
   );
+
+-- ══════════════════════════════════════════════════════════════
+-- MIGRATION — two-level sharing (share_id_full)
+-- Safe to run multiple times.
+-- ══════════════════════════════════════════════════════════════
+
+ALTER TABLE public.books
+  ADD COLUMN IF NOT EXISTS share_id_full UUID UNIQUE;
+
+CREATE INDEX IF NOT EXISTS idx_books_share_id_full
+  ON public.books(share_id_full) WHERE share_id_full IS NOT NULL;
+
+-- Allow unauthenticated reads via the full-access code
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename  = 'books'
+      AND policyname = 'books: select shared full'
+  ) THEN
+    EXECUTE $policy$
+      CREATE POLICY "books: select shared full" ON public.books FOR SELECT
+        USING (is_shared = TRUE AND share_id_full IS NOT NULL)
+    $policy$;
+  END IF;
+END
+$$;
+-- ══════════════════════════════════════════════════════════════
 
 -- ── REALTIME ─────────────────────────────────────────────────
 -- Enable Realtime for all tables (do this in Supabase Dashboard → Database → Replication)

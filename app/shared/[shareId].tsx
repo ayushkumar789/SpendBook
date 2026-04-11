@@ -3,13 +3,14 @@ import {
   View,
   Text,
   ScrollView,
+  TouchableOpacity,
   StyleSheet,
   RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  getBookByShareId,
+  getBookByAnyShareId,
   getTransactions,
   getUser,
   subscribeToSharedBook,
@@ -26,20 +27,27 @@ import { CategoryPieChart } from '../../components/charts/CategoryPieChart';
 
 export default function SharedBookScreen() {
   const { shareId } = useLocalSearchParams<{ shareId: string }>();
+  const router = useRouter();
   const [book, setBook] = useState<Book | null>(null);
+  const [accessLevel, setAccessLevel] = useState<'view' | 'full'>('view');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [owner, setOwner] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   async function loadAll(sid: string) {
-    const b = await getBookByShareId(sid);
-    setBook(b);
-    if (b) {
-      const txns = await getTransactions(b.id);
+    const result = await getBookByAnyShareId(sid);
+    if (result) {
+      setBook(result.book);
+      setAccessLevel(result.accessLevel);
+      const [txns, ownerData] = await Promise.all([
+        getTransactions(result.book.id),
+        getUser(result.book.owner_id),
+      ]);
       setTransactions(txns);
-      const ownerData = await getUser(b.owner_id);
       setOwner(ownerData);
+    } else {
+      setBook(null);
     }
     setLoading(false);
     setRefreshing(false);
@@ -97,7 +105,9 @@ export default function SharedBookScreen() {
         {/* Live Badge */}
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE · Read Only</Text>
+          <Text style={styles.liveText}>
+            {accessLevel === 'full' ? 'LIVE · Full Access' : 'LIVE · View Only'}
+          </Text>
         </View>
 
         <View style={styles.headerTop}>
@@ -146,19 +156,28 @@ export default function SharedBookScreen() {
           transactions.map((t) => {
             const cat = getCategoryByKey(t.category);
             const isIn = t.type === 'in';
+            const isTransfer = t.type === 'transfer';
+            const canTap = accessLevel === 'full';
             return (
-              <View key={t.id} style={styles.txnRow}>
-                <View style={[styles.txnIcon, { backgroundColor: isIn ? Colors.cashInBg : Colors.cashOutBg }]}>
+              <TouchableOpacity
+                key={t.id}
+                style={styles.txnRow}
+                onPress={canTap ? () => router.push(`/transaction/${t.id}`) : undefined}
+                activeOpacity={canTap ? 0.75 : 1}
+              >
+                <View style={[styles.txnIcon, {
+                  backgroundColor: isIn ? Colors.cashInBg : isTransfer ? Colors.balanceBg : Colors.cashOutBg,
+                }]}>
                   <Ionicons
-                    name={isIn ? 'arrow-down-outline' : 'arrow-up-outline'}
+                    name={isIn ? 'arrow-down-outline' : isTransfer ? 'swap-horizontal-outline' : 'arrow-up-outline'}
                     size={16}
-                    color={isIn ? Colors.cashIn : Colors.cashOut}
+                    color={isIn ? Colors.cashIn : isTransfer ? Colors.balance : Colors.cashOut}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.txnTopRow}>
                     <Text style={styles.txnAmount}>
-                      {isIn ? '+' : '-'} {formatCurrency(t.amount)}
+                      {isIn ? '+' : isTransfer ? '' : '-'} {formatCurrency(t.amount)}
                     </Text>
                     <Text style={styles.txnDate}>{formatDateShort(t.date)}</Text>
                   </View>
@@ -170,7 +189,8 @@ export default function SharedBookScreen() {
                     {t.note ? <Text style={styles.txnNote} numberOfLines={1}>{t.note}</Text> : null}
                   </View>
                 </View>
-              </View>
+                {canTap && <Ionicons name="chevron-forward" size={14} color={Colors.muted} />}
+              </TouchableOpacity>
             );
           })
         )}

@@ -5,13 +5,16 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Text,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { useTheme } from '../../hooks/useTheme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const DISMISS_THRESHOLD = 80;
+const VELOCITY_THRESHOLD = 0.5;
 
 interface Props {
   visible: boolean;
@@ -22,6 +25,7 @@ interface Props {
 }
 
 export function BottomSheet({ visible, onClose, title, children, maxHeight = SCREEN_HEIGHT * 0.85 }: Props) {
+  const { colors } = useTheme();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -39,19 +43,50 @@ export function BottomSheet({ visible, onClose, title, children, maxHeight = SCR
     }
   }, [visible]);
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy > 0) translateY.setValue(gesture.dy);
+      },
+
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > DISMISS_THRESHOLD || gesture.vy > VELOCITY_THRESHOLD) {
+          onClose();
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200 }).start();
+        }
+      },
+
+      onPanResponderTerminate: () => {
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 200 }).start();
+      },
+    })
+  ).current;
+
   return (
     <Modal transparent visible={visible} onRequestClose={onClose} animationType="none">
       <Animated.View style={[styles.overlay, { opacity }]}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={onClose} activeOpacity={1} />
       </Animated.View>
-      <Animated.View style={[styles.sheet, { transform: [{ translateY }], maxHeight }]}>
-        <View style={styles.handle} />
+
+      <Animated.View style={[
+        styles.sheet,
+        { transform: [{ translateY }], maxHeight, backgroundColor: colors.card },
+      ]}>
+        <View style={styles.handleContainer} {...panResponder.panHandlers}>
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        </View>
+
         {title ? (
-          <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.body }]}>{title}</Text>
           </View>
         ) : null}
-        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+
+        <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
       </Animated.View>
@@ -69,29 +104,27 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingBottom: 32,
+  },
+  handleContainer: {
+    paddingVertical: 14,
+    alignItems: 'center',
   },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 2,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.body,
   },
 });

@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { createBook } from '../../lib/supabase';
+import uuid from 'react-native-uuid';
 import { Colors } from '../../constants/colors';
 
 const BOOK_COLORS = Colors.bookColors;
@@ -41,7 +42,8 @@ export default function CreateBookScreen() {
         color_tag: colorTag,
         icon_emoji: iconEmoji,
         is_shared: false,
-        share_id: null,
+        share_id: uuid.v4() as string,
+        share_id_full: uuid.v4() as string,
       });
       router.back();
     } catch {

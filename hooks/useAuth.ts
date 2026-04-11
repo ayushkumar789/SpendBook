@@ -17,23 +17,13 @@ export function useAuth(): AuthState {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 8-second timeout fallback
+    // 8-second timeout fallback in case onAuthStateChange never fires
     const timeout = setTimeout(() => setLoading(false), 8000);
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data }) => {
-      clearTimeout(timeout);
-      const s = data.session;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        await syncUser(s.user);
-      }
-      setLoading(false);
-    });
-
-    // Listen for auth state changes
+    // onAuthStateChange fires INITIAL_SESSION immediately with the persisted session
+    // from AsyncStorage, so it is the single source of truth — no separate getSession() needed.
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      clearTimeout(timeout);
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {

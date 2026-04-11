@@ -117,6 +117,14 @@ export async function addPaymentMethod(
   return data as PaymentMethod;
 }
 
+export async function updatePaymentMethod(
+  id: string,
+  updates: Partial<Omit<PaymentMethod, 'id' | 'created_at' | 'owner_id'>>
+): Promise<void> {
+  const { error } = await supabase.from('payment_methods').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
 export async function deletePaymentMethod(id: string): Promise<void> {
   const { error } = await supabase.from('payment_methods').delete().eq('id', id);
   if (error) throw error;
@@ -169,6 +177,36 @@ export async function getBookByShareId(shareId: string): Promise<Book | null> {
   return data as Book;
 }
 
+/**
+ * Looks up a book by either share code.
+ * Returns the book plus which access level the code grants:
+ *   'view'  — matched share_id       (transaction list + charts only)
+ *   'full'  — matched share_id_full  (+ transaction detail tap)
+ */
+export async function getBookByAnyShareId(
+  shareId: string,
+): Promise<{ book: Book; accessLevel: 'view' | 'full' } | null> {
+  // Try view-only code first
+  const { data: viewData } = await supabase
+    .from('books')
+    .select('*')
+    .eq('share_id', shareId)
+    .eq('is_shared', true)
+    .single();
+  if (viewData) return { book: viewData as Book, accessLevel: 'view' };
+
+  // Try full-access code
+  const { data: fullData } = await supabase
+    .from('books')
+    .select('*')
+    .eq('share_id_full', shareId)
+    .eq('is_shared', true)
+    .single();
+  if (fullData) return { book: fullData as Book, accessLevel: 'full' };
+
+  return null;
+}
+
 export async function createBook(book: Omit<Book, 'id' | 'created_at'>): Promise<Book> {
   const { data, error } = await supabase.from('books').insert(book).select().single();
   if (error) throw error;
@@ -187,10 +225,14 @@ export async function deleteBook(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function enableSharing(bookId: string, shareId: string): Promise<void> {
+export async function enableSharing(
+  bookId: string,
+  shareId: string,
+  shareIdFull: string,
+): Promise<void> {
   const { error } = await supabase
     .from('books')
-    .update({ is_shared: true, share_id: shareId })
+    .update({ is_shared: true, share_id: shareId, share_id_full: shareIdFull })
     .eq('id', bookId);
   if (error) throw error;
 }
@@ -198,15 +240,25 @@ export async function enableSharing(bookId: string, shareId: string): Promise<vo
 export async function disableSharing(bookId: string): Promise<void> {
   const { error } = await supabase
     .from('books')
-    .update({ is_shared: false, share_id: null })
+    .update({ is_shared: false, share_id: null, share_id_full: null })
     .eq('id', bookId);
   if (error) throw error;
 }
 
+/** Reset the view-only share code only. */
 export async function resetShareLink(bookId: string, newShareId: string): Promise<void> {
   const { error } = await supabase
     .from('books')
     .update({ share_id: newShareId })
+    .eq('id', bookId);
+  if (error) throw error;
+}
+
+/** Reset the full-access share code only. */
+export async function resetShareLinkFull(bookId: string, newShareIdFull: string): Promise<void> {
+  const { error } = await supabase
+    .from('books')
+    .update({ share_id_full: newShareIdFull })
     .eq('id', bookId);
   if (error) throw error;
 }
@@ -239,8 +291,8 @@ export function subscribeToSharedBook(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'books' },
       async () => {
-        const book = await getBookByShareId(shareId);
-        callback(book);
+        const result = await getBookByAnyShareId(shareId);
+        callback(result?.book ?? null);
       }
     )
     .subscribe();
@@ -254,17 +306,38 @@ export async function getTransactions(bookId: string): Promise<Transaction[]> {
     .from('transactions')
     .select('*')
     .eq('book_id', bookId)
-    .order('date', { ascending: false });
+    .order('date', { ascending: false })
+    .order('order', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Transaction[];
+}
+
+export async function updateTransactionOrders(updates: { id: string; order: number }[]): Promise<void> {
+  await Promise.all(
+    updates.map(({ id, order }) =>
+      supabase.from('transactions').update({ order }).eq('id', id)
+    )
+  );
 }
 
 export async function addTransaction(
   transaction: Omit<Transaction, 'id' | 'created_at'>
 ): Promise<Transaction> {
+  const payload = {
+    book_id:              transaction.book_id,
+    owner_id:             transaction.owner_id,
+    type:                 transaction.type,
+    amount:               transaction.amount,
+    category:             transaction.category,
+    payment_method_id:    transaction.payment_method_id,
+    to_payment_method_id: transaction.to_payment_method_id,
+    person:               transaction.person,
+    note:                 transaction.note,
+    date:                 transaction.date,
+  };
   const { data, error } = await supabase
     .from('transactions')
-    .insert(transaction)
+    .insert(payload)
     .select()
     .single();
   if (error) throw error;

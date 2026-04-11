@@ -44,15 +44,15 @@ export default function AddPaymentMethodScreen() {
   function checkDuplicate(): boolean {
     if (!selectedBank || !selectedType) return false;
     const bankKey = selectedBank.key;
+    const l4 = lastFour.trim();
     return methods.some((m) => {
       if (m.bank_key !== bankKey) return false;
       if (m.payment_type !== selectedType) return false;
-      if (selectedType !== 'UPI' && lastFour && m.last_four_digits === lastFour) return true;
+      if ((m.last_four_digits ?? '') !== l4) return false;
       if (selectedType === 'UPI') {
-        const appKey = selectedUpiApp?.key ?? '';
-        return m.upi_app === appKey;
+        return m.upi_app === (selectedUpiApp?.key ?? '');
       }
-      return false;
+      return true;
     });
   }
 
@@ -77,7 +77,7 @@ export default function AddPaymentMethodScreen() {
       return;
     }
 
-    if (selectedType !== 'UPI' && !selectedType.includes('Banking') && lastFour.length > 0 && lastFour.length !== 4) {
+    if (lastFour.length > 0 && lastFour.length !== 4) {
       setDuplicateError('Last 4 digits must be exactly 4 digits.');
       return;
     }
@@ -255,20 +255,16 @@ export default function AddPaymentMethodScreen() {
           </>
         ) : null}
 
-        {selectedType !== 'UPI' && selectedType !== 'Net Banking' ? (
-          <>
-            <Text style={styles.label}>Last 4 Digits (optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={lastFour}
-              onChangeText={(t) => setLastFour(t.replace(/\D/g, '').slice(0, 4))}
-              placeholder="e.g. 4242"
-              placeholderTextColor={Colors.muted}
-              keyboardType="numeric"
-              maxLength={4}
-            />
-          </>
-        ) : null}
+        <Text style={styles.label}>Account Number – Last 4 Digits (optional)</Text>
+        <TextInput
+          style={styles.input}
+          value={lastFour}
+          onChangeText={(t) => setLastFour(t.replace(/\D/g, '').slice(0, 4))}
+          placeholder="e.g. 4521"
+          placeholderTextColor={Colors.muted}
+          keyboardType="numeric"
+          maxLength={4}
+        />
 
         {duplicateError ? (
           <Text style={styles.errorText}>{duplicateError}</Text>

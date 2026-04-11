@@ -32,7 +32,8 @@ export interface Book {
   icon_emoji: string;
   created_at: string;
   is_shared: boolean;
-  share_id: string | null;
+  share_id: string | null;       // view-only share code
+  share_id_full: string | null;  // full-access share code (allows transaction detail view)
 }
 
 export interface Transaction {
@@ -47,6 +48,7 @@ export interface Transaction {
   person: string;                       // who you sent to / received from
   note: string;
   date: string;
+  order: number;                         // sort position within the same date, ascending
   created_at: string;
 }
 
