@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getBook, deleteTransaction, enableSharing, disableSharing, resetShareLink, resetShareLinkFull, updateTransactionOrders } from '../../lib/supabase';
 import { useTransactions } from '../../hooks/useTransactions';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
+import { usePaymentMethodGroups } from '../../hooks/usePaymentMethodGroups';
 import { useTheme } from '../../hooks/useTheme';
 import { Transaction, Book, PaymentMethod } from '../../constants/types';
 import { AppColors } from '../../constants/colors';
@@ -119,22 +120,11 @@ export default function BookDetailScreen() {
 
   const { transactions, loading, cashIn, cashOut, balance } = useTransactions(id ?? null);
   const { methods: allMethods } = usePaymentMethods(book?.owner_id ?? null);
+  const { groups } = usePaymentMethodGroups(book?.owner_id ?? null);
   const styles = makeStyles(colors);
 
-  // Unique payment methods actually referenced by this book's transactions
-  const usedMethodIds = useMemo(() => {
-    const ids = new Set<string>();
-    transactions.forEach((t) => {
-      if (t.payment_method_id) ids.add(t.payment_method_id);
-      if (t.to_payment_method_id) ids.add(t.to_payment_method_id);
-    });
-    return ids;
-  }, [transactions]);
-
-  const usedMethods = useMemo(
-    () => allMethods.filter((m) => usedMethodIds.has(m.id)),
-    [allMethods, usedMethodIds],
-  );
+  // All payment methods belonging to this book's owner, shown in the filter picker
+  const usedMethods = allMethods;
 
   /** True if any transaction in this book used Cash (no payment method) */
   const hasCashTxns = useMemo(
@@ -146,9 +136,13 @@ export default function BookDetailScreen() {
   const methodFilterLabel = useMemo(() => {
     if (!methodFilter) return 'All Methods';
     if (methodFilter === '__cash__') return 'Cash';
+    if (methodFilter.startsWith('__grp__:')) {
+      const grp = groups.find((g) => g.id === methodFilter.slice(8));
+      return grp ? grp.name : 'Group';
+    }
     const m = allMethods.find((x) => x.id === methodFilter);
     return m ? paymentMethodLabel(m) : 'Method';
-  }, [methodFilter, allMethods]);
+  }, [methodFilter, allMethods, groups]);
 
   const loadBook = useCallback(async () => {
     if (!id) return;
@@ -164,10 +158,20 @@ export default function BookDetailScreen() {
     const typeOk =
       filter === 'Cash In' ? t.type === 'in' :
       filter === 'Cash Out' ? t.type === 'out' : true;
-    const methodOk =
-      methodFilter === null ? true :
-      methodFilter === '__cash__' ? (!t.payment_method_id && !t.to_payment_method_id) :
-      t.payment_method_id === methodFilter || t.to_payment_method_id === methodFilter;
+    let methodOk: boolean;
+    if (!methodFilter) {
+      methodOk = true;
+    } else if (methodFilter === '__cash__') {
+      methodOk = !t.payment_method_id && !t.to_payment_method_id;
+    } else if (methodFilter.startsWith('__grp__:')) {
+      const grp = groups.find((g) => g.id === methodFilter.slice(8));
+      methodOk = grp
+        ? (t.payment_method_id != null && grp.member_ids.includes(t.payment_method_id)) ||
+          (t.to_payment_method_id != null && grp.member_ids.includes(t.to_payment_method_id))
+        : true;
+    } else {
+      methodOk = t.payment_method_id === methodFilter || t.to_payment_method_id === methodFilter;
+    }
     return typeOk && methodOk;
   });
 
@@ -447,7 +451,7 @@ export default function BookDetailScreen() {
                       activeOpacity={0.75}
                     >
                       <Ionicons
-                        name="card-outline"
+                        name={methodFilter?.startsWith('__grp__:') ? 'folder-outline' : 'card-outline'}
                         size={13}
                         color={methodFilter !== null ? colors.primary : colors.muted}
                       />
@@ -598,6 +602,36 @@ export default function BookDetailScreen() {
             <Ionicons name="close-circle-outline" size={20} color={colors.cashOut} />
             <Text style={[styles.pmRowLabel, { color: colors.cashOut, flex: 1 }]}>Clear filter — show all methods</Text>
           </TouchableOpacity>
+        )}
+
+        {/* Groups */}
+        {groups.length > 0 && (
+          <>
+            {groups.map((g, idx) => {
+              const isActive = methodFilter === `__grp__:${g.id}`;
+              return (
+                <TouchableOpacity
+                  key={g.id}
+                  style={[
+                    styles.pmRow,
+                    (methodFilter !== null || idx > 0) && { borderTopWidth: 0.5, borderTopColor: colors.border },
+                  ]}
+                  onPress={() => { setMethodFilter(`__grp__:${g.id}`); setMethodSheetVisible(false); }}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.pmMethodIcon, { backgroundColor: g.color + '22' }]}>
+                    <Ionicons name="folder-outline" size={16} color={g.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pmRowLabel} numberOfLines={1}>{g.name}</Text>
+                    <Text style={styles.pmRowSub}>{g.member_ids.length} method{g.member_ids.length !== 1 ? 's' : ''}</Text>
+                  </View>
+                  {isActive && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+            <View style={{ borderTopWidth: 0.5, borderTopColor: colors.border, marginTop: 4, marginBottom: 4 }} />
+          </>
         )}
 
         {/* Cash option */}

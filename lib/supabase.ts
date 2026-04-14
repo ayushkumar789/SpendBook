@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
-import { AppUser, Book, PaymentMethod, Transaction } from '../constants/types';
+import { AppUser, Book, PaymentMethod, PaymentMethodGroup, PaymentMethodGroupWithMembers, Transaction } from '../constants/types';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
@@ -146,6 +146,49 @@ export function subscribeToPaymentMethods(
     )
     .subscribe();
   return channel;
+}
+
+// ─── PAYMENT METHOD GROUPS ────────────────────────────────────────────────────
+
+export async function getGroups(ownerId: string): Promise<PaymentMethodGroupWithMembers[]> {
+  const { data, error } = await supabase
+    .from('payment_method_groups')
+    .select('*, payment_method_group_members(payment_method_id)')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((g: any) => ({
+    id: g.id,
+    owner_id: g.owner_id,
+    name: g.name,
+    color: g.color,
+    created_at: g.created_at,
+    member_ids: (g.payment_method_group_members ?? []).map((m: any) => m.payment_method_id as string),
+  }));
+}
+
+export async function createGroup(
+  group: Omit<PaymentMethodGroup, 'id' | 'created_at'>,
+  memberIds: string[],
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('payment_method_groups')
+    .insert(group)
+    .select('id')
+    .single();
+  if (error) throw error;
+  if (memberIds.length > 0) {
+    const members = memberIds.map((pmId) => ({ group_id: data.id, payment_method_id: pmId }));
+    const { error: membersError } = await supabase
+      .from('payment_method_group_members')
+      .insert(members);
+    if (membersError) throw membersError;
+  }
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  const { error } = await supabase.from('payment_method_groups').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ─── BOOKS ────────────────────────────────────────────────────────────────────

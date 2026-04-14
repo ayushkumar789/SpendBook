@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getBookByShareId } from '../../lib/supabase';
+import { getBookByAnyShareId } from '../../lib/supabase';
 import { Colors } from '../../constants/colors';
 
 export default function EnterCodeScreen() {
@@ -28,8 +28,8 @@ export default function EnterCodeScreen() {
     }
     setLoading(true);
     try {
-      const book = await getBookByShareId(trimmed);
-      if (!book) {
+      const result = await getBookByAnyShareId(trimmed);
+      if (!result) {
         Alert.alert('Not Found', 'No shared book found with that code. Please check and try again.');
         return;
       }

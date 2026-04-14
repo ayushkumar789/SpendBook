@@ -79,6 +79,7 @@ function RootLayoutNav() {
       <Stack.Screen name="transaction/add" options={{ title: 'Add Transaction', presentation: 'modal' }} />
       <Stack.Screen name="transaction/edit/[id]" options={{ title: 'Edit Transaction', presentation: 'modal' }} />
       <Stack.Screen name="payment-method/add" options={{ title: 'Add Payment Method', presentation: 'modal' }} />
+      <Stack.Screen name="payment-method/group/create" options={{ title: 'Create Group', presentation: 'modal' }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       <Stack.Screen name="shared/enter-code" options={{ title: 'Enter Share Code' }} />
       <Stack.Screen name="shared/[shareId]" options={{ title: 'Shared Book' }} />

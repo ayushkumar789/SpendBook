@@ -57,3 +57,16 @@ export interface BookStats {
   cashOut: number;
   balance: number;
 }
+
+export interface PaymentMethodGroup {
+  id: string;
+  owner_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+/** Group as returned by getGroups — includes the resolved list of member method IDs */
+export interface PaymentMethodGroupWithMembers extends PaymentMethodGroup {
+  member_ids: string[];
+}

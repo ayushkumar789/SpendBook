@@ -11,9 +11,10 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { usePaymentMethods } from '../../hooks/usePaymentMethods';
+import { usePaymentMethodGroups } from '../../hooks/usePaymentMethodGroups';
 import { useTheme } from '../../hooks/useTheme';
-import { deletePaymentMethod } from '../../lib/supabase';
-import { PaymentMethod, PaymentType } from '../../constants/types';
+import { deletePaymentMethod, deleteGroup } from '../../lib/supabase';
+import { PaymentMethod, PaymentMethodGroupWithMembers, PaymentType } from '../../constants/types';
 import { AppColors } from '../../constants/colors';
 import { getBankByKey } from '../../constants/banks';
 import { getUpiAppByKey } from '../../constants/upiApps';
@@ -90,6 +91,7 @@ export default function PaymentMethodsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { grouped, loading } = usePaymentMethods(user?.id ?? null);
+  const { groups, loading: groupsLoading } = usePaymentMethodGroups(user?.id ?? null);
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 
@@ -127,14 +129,86 @@ export default function PaymentMethodsScreen() {
     );
   }
 
-  if (loading) return <LoadingSpinner fullScreen />;
+  async function handleDeleteGroup(group: PaymentMethodGroupWithMembers) {
+    Alert.alert(
+      'Delete Group',
+      `Delete the group "${group.name}"? Your payment methods won't be affected.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteGroup(group.id);
+            } catch {
+              Alert.alert('Error', 'Failed to delete group.');
+            }
+          },
+        },
+      ]
+    );
+  }
 
-  const hasAny = Object.values(grouped).some((arr) => arr.length > 0);
+  if (loading || groupsLoading) return <LoadingSpinner fullScreen />;
+
+  const hasAnyMethods = Object.values(grouped).some((arr) => arr.length > 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.pageBg }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-        {!hasAny ? (
+
+        {/* ── Groups section ──────────────────────────────────────── */}
+        <View style={{ marginBottom: 24 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionEmoji}>📁</Text>
+            <Text style={[styles.sectionTitle, { color: '#475569', flex: 1 }]}>Groups</Text>
+            {groups.length > 0 && <Text style={styles.sectionCount}>{groups.length}</Text>}
+            <TouchableOpacity
+              style={styles.newGroupBtn}
+              onPress={() => router.push('/payment-method/group/create')}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="add" size={15} color={colors.primary} />
+              <Text style={styles.newGroupBtnText}>New</Text>
+            </TouchableOpacity>
+          </View>
+
+          {groups.length === 0 ? (
+            <View style={styles.groupEmptyCard}>
+              <Ionicons name="folder-open-outline" size={22} color={colors.muted} />
+              <Text style={styles.groupEmptyText}>
+                Group methods together for quick filtering in your books.
+              </Text>
+            </View>
+          ) : (
+            groups.map((g) => (
+              <TouchableOpacity
+                key={g.id}
+                style={styles.groupCard}
+                onLongPress={() => handleDeleteGroup(g)}
+                delayLongPress={400}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.groupDot, { backgroundColor: g.color }]}>
+                  <Ionicons name="folder-outline" size={16} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupName}>{g.name}</Text>
+                  <Text style={styles.groupMeta}>
+                    {g.member_ids.length} method{g.member_ids.length !== 1 ? 's' : ''} · hold to delete
+                  </Text>
+                </View>
+                <View style={[styles.groupCountBadge, { backgroundColor: g.color + '18' }]}>
+                  <Text style={[styles.groupCountText, { color: g.color }]}>{g.member_ids.length}</Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
+        {/* ── Payment method type sections ─────────────────────────── */}
+        {!hasAnyMethods ? (
           <EmptyState emoji="💳" title="No payment methods yet" subtitle="Tap + to add UPI, debit/credit card, or net banking" />
         ) : (
           (Object.keys(grouped) as PaymentType[]).map((type) => {
@@ -191,7 +265,7 @@ export default function PaymentMethodsScreen() {
 const makeStyles = (C: AppColors) => StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, paddingHorizontal: 2 },
   sectionEmoji: { fontSize: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', flex: 1 },
+  sectionTitle: { fontSize: 14, fontWeight: '700' },
   sectionCount: {
     backgroundColor: C.border,
     borderRadius: 10,
@@ -201,6 +275,64 @@ const makeStyles = (C: AppColors) => StyleSheet.create({
     color: C.muted,
     fontWeight: '600',
   },
+  // Groups
+  newGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.primary + '40',
+    backgroundColor: C.primary + '0c',
+  },
+  newGroupBtnText: { fontSize: 12, fontWeight: '700', color: C.primary },
+  groupEmptyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 14,
+  },
+  groupEmptyText: { fontSize: 13, color: C.muted, flex: 1, lineHeight: 19 },
+  groupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: C.border,
+    padding: 12,
+    marginBottom: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+  },
+  groupDot: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupName: { fontSize: 14, fontWeight: '600', color: C.body, marginBottom: 2 },
+  groupMeta: { fontSize: 11, color: C.muted },
+  groupCountBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  groupCountText: { fontSize: 13, fontWeight: '700' },
   card: {
     backgroundColor: C.card,
     borderRadius: 12,

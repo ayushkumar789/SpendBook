@@ -17,8 +17,8 @@ export function useAuth(): AuthState {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 8-second timeout fallback in case onAuthStateChange never fires
-    const timeout = setTimeout(() => setLoading(false), 8000);
+    // 3-second timeout fallback in case onAuthStateChange never fires on cold start
+    const timeout = setTimeout(() => setLoading(false), 3000);
 
     // onAuthStateChange fires INITIAL_SESSION immediately with the persisted session
     // from AsyncStorage, so it is the single source of truth — no separate getSession() needed.
