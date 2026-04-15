@@ -148,9 +148,41 @@ export function subscribeToPaymentMethods(
   return channel;
 }
 
+// Fetch payment methods belonging to a book's owner.
+// Used by shared book viewers — requires the RLS policy that allows SELECT
+// when owner_id is in (SELECT owner_id FROM books WHERE is_shared = TRUE).
+export async function getPaymentMethodsByOwner(ownerId: string): Promise<PaymentMethod[]> {
+  const { data, error } = await supabase
+    .from('payment_methods')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PaymentMethod[];
+}
+
 // ─── PAYMENT METHOD GROUPS ────────────────────────────────────────────────────
 
 export async function getGroups(ownerId: string): Promise<PaymentMethodGroupWithMembers[]> {
+  const { data, error } = await supabase
+    .from('payment_method_groups')
+    .select('*, payment_method_group_members(payment_method_id)')
+    .eq('owner_id', ownerId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((g: any) => ({
+    id: g.id,
+    owner_id: g.owner_id,
+    name: g.name,
+    color: g.color,
+    created_at: g.created_at,
+    member_ids: (g.payment_method_group_members ?? []).map((m: any) => m.payment_method_id as string),
+  }));
+}
+
+// Fetch payment method groups belonging to a book's owner.
+// Used by shared book viewers — requires the same shared-book RLS policy.
+export async function getGroupsByOwner(ownerId: string): Promise<PaymentMethodGroupWithMembers[]> {
   const { data, error } = await supabase
     .from('payment_method_groups')
     .select('*, payment_method_group_members(payment_method_id)')

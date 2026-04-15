@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,13 @@ import {
   RefreshControl,
   StyleSheet,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { useBooks } from '../../hooks/useBooks';
 import { useTheme } from '../../hooks/useTheme';
-import { deleteBook } from '../../lib/supabase';
+import { deleteBook, getBookByAnyShareId, getUser } from '../../lib/supabase';
 import { Book } from '../../constants/types';
 import { AppColors } from '../../constants/colors';
 import { formatCurrency } from '../../lib/format';
@@ -22,6 +23,14 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { FAB } from '../../components/ui/FAB';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { useTransactions as useBookTransactions } from '../../hooks/useTransactions';
+
+const SAVED_SHARED_KEY = 'saved_shared_books';
+
+type SavedSharedBook = {
+  code: string;
+  book: Book;
+  ownerName: string;
+};
 
 function BookStatsRow({ bookId }: { bookId: string }) {
   const { cashIn, cashOut, balance } = useBookTransactions(bookId);
@@ -72,6 +81,33 @@ function BookCard({ book, onPress, onLongPress }: { book: Book; onPress: () => v
   );
 }
 
+function SharedBookCard({ item, onPress }: { item: SavedSharedBook; onPress: () => void }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  return (
+    <TouchableOpacity style={styles.sharedCard} onPress={onPress} activeOpacity={0.85}>
+      {/* Left accent — always primary purple to signal it's not yours */}
+      <View style={[styles.colorAccent, { backgroundColor: colors.primary }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.bookEmoji}>{item.book.icon_emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bookName}>{item.book.name}</Text>
+            {item.book.description ? (
+              <Text style={styles.bookDesc} numberOfLines={1}>{item.book.description}</Text>
+            ) : null}
+            <Text style={styles.sharedOwner}>by {item.ownerName}</Text>
+          </View>
+          <View style={styles.sharedWithMeBadge}>
+            <Ionicons name="link-outline" size={11} color={colors.primary} />
+            <Text style={styles.sharedWithMeText}>Shared</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -79,8 +115,52 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [activeBook, setActiveBook] = useState<Book | null>(null);
+  const [savedSharedBooks, setSavedSharedBooks] = useState<SavedSharedBook[]>([]);
 
   const styles = makeStyles(colors);
+
+  const loadSavedSharedBooks = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SAVED_SHARED_KEY);
+      if (!raw) return;
+      const codes: string[] = JSON.parse(raw);
+      if (!codes.length) return;
+
+      const results = await Promise.all(
+        codes.map(async (code) => {
+          try {
+            const r = await getBookByAnyShareId(code);
+            return { code, r };
+          } catch {
+            return { code, r: null };
+          }
+        }),
+      );
+
+      // Separate valid (still shared) from stale
+      const valid = results.filter(({ r }) => r != null && r.book.is_shared);
+      const validCodes = valid.map(({ code }) => code);
+
+      // Prune stale codes from storage
+      if (validCodes.length !== codes.length) {
+        await AsyncStorage.setItem(SAVED_SHARED_KEY, JSON.stringify(validCodes));
+      }
+
+      // Fetch owner display names in parallel
+      const withOwners = await Promise.all(
+        valid.map(async ({ code, r }) => {
+          const owner = await getUser(r!.book.owner_id).catch(() => null);
+          return { code, book: r!.book, ownerName: owner?.display_name ?? 'Unknown' };
+        }),
+      );
+
+      setSavedSharedBooks(withOwners);
+    } catch {
+      // Non-fatal — shared section simply won't show
+    }
+  }, []);
+
+  useEffect(() => { loadSavedSharedBooks(); }, [loadSavedSharedBooks]);
 
   async function handleDelete(book: Book) {
     setActiveBook(null);
@@ -106,7 +186,8 @@ export default function HomeScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    await loadSavedSharedBooks();
+    setTimeout(() => setRefreshing(false), 400);
   }
 
   if (loading) return <LoadingSpinner fullScreen />;
@@ -119,6 +200,7 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        {/* ── Owned books ───────────────────────────────────── */}
         {books.length === 0 ? (
           <EmptyState
             emoji="📒"
@@ -134,6 +216,23 @@ export default function HomeScreen() {
               onLongPress={() => setActiveBook(book)}
             />
           ))
+        )}
+
+        {/* ── Shared With Me ────────────────────────────────── */}
+        {savedSharedBooks.length > 0 && (
+          <View style={{ marginTop: books.length > 0 ? 8 : 0 }}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="link-outline" size={15} color={colors.primary} />
+              <Text style={styles.sectionHeaderText}>Shared With Me</Text>
+            </View>
+            {savedSharedBooks.map((item) => (
+              <SharedBookCard
+                key={item.code}
+                item={item}
+                onPress={() => router.push(`/shared/${item.code}`)}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
       <FAB onPress={() => router.push('/book/create')} />
@@ -197,12 +296,55 @@ const makeStyles = (C: AppColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#ede9fe',
+    backgroundColor: C.primary + '14',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
   sharedText: { fontSize: 10, color: C.primary, fontWeight: '600' },
+  // Section header for "Shared With Me"
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.primary,
+    flex: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  // Shared-with-me book card — purple left border, no long-press
+  sharedCard: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: C.primary + '30',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  sharedOwner: { fontSize: 11, color: C.secondary, marginTop: 3, fontWeight: '500' },
+  sharedWithMeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: C.primary + '14',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  sharedWithMeText: { fontSize: 10, color: C.primary, fontWeight: '600' },
   optRow: {
     flexDirection: 'row',
     alignItems: 'center',

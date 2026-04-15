@@ -29,6 +29,7 @@ import { BottomSheet } from '../../components/ui/BottomSheet';
 import { SpendingBarChart } from '../../components/charts/SpendingBarChart';
 import { CategoryPieChart } from '../../components/charts/CategoryPieChart';
 import { DraggableList } from '../../components/ui/DraggableList';
+import { ReportModal } from '../../components/ReportModal';
 import uuid from 'react-native-uuid';
 
 type FilterType = 'All' | 'Cash In' | 'Cash Out';
@@ -117,6 +118,7 @@ export default function BookDetailScreen() {
   const [reorderMode, setReorderMode] = useState(false);
   /** Maps date string "YYYY-MM-DD" → reordered transactions for that day (not yet persisted) */
   const [pendingReorders, setPendingReorders] = useState<Record<string, Transaction[]>>({});
+  const [reportModalVisible, setReportModalVisible] = useState(false);
 
   const { transactions, loading, cashIn, cashOut, balance } = useTransactions(id ?? null);
   const { methods: allMethods } = usePaymentMethods(book?.owner_id ?? null);
@@ -382,6 +384,9 @@ export default function BookDetailScreen() {
                 />
               </TouchableOpacity>
             )}
+            <TouchableOpacity onPress={() => setReportModalVisible(true)} style={{ padding: 4, marginRight: 4 }}>
+              <Ionicons name="document-text-outline" size={20} color={colors.muted} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push(`/book/edit/${id}`)} style={{ padding: 4 }}>
               <Ionicons name="pencil-outline" size={20} color={colors.muted} />
             </TouchableOpacity>
@@ -701,6 +706,15 @@ export default function BookDetailScreen() {
           <Text style={[styles.actionText, { color: colors.cashOut }]}>Delete Transaction</Text>
         </TouchableOpacity>
       </BottomSheet>
+
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        book={book}
+        transactions={transactions}
+        methods={allMethods}
+        groups={groups}
+      />
 
       <BottomSheet visible={shareSheetVisible} onClose={() => setShareSheetVisible(false)} title="Share This Book">
         {book.is_shared && book.share_id && book.share_id_full ? (
